@@ -1,16 +1,17 @@
-import math
-import numpy as np
 import copy
+
+import numpy as np
 import torch
 
-LARGEPRIME = 2**61-1
+LARGEPRIME = 2 ** 61 - 1
 
 cache = {}
 
-#import line_profiler
-#import atexit
-#profile = line_profiler.LineProfiler()
-#atexit.register(profile.print_stats)
+
+# import line_profiler
+# import atexit
+# profile = line_profiler.LineProfiler()
+# atexit.register(profile.print_stats)
 
 class CSVec(object):
     """ Count Sketch of a vector
@@ -55,10 +56,10 @@ class CSVec(object):
         # reuse them if someone else makes a sketch with the same d, c, r
         global cache
 
-        self.r = r # num of rows
-        self.c = c # num of columns
+        self.r = r  # num of rows
+        self.c = c  # num of columns
         # need int() here b/c annoying np returning np.int64...
-        self.d = int(d) # vector dimensionality
+        self.d = int(d)  # vector dimensionality
 
         # reduce memory consumption of signs & buckets by constraining
         # them to be repetitions of a single block
@@ -122,7 +123,7 @@ class CSVec(object):
                                               size=(self.numBlocks,),
                                               device=self.device)
         else:
-            assert(numBlocks == 1)
+            assert (numBlocks == 1)
             nTokens = self.d
 
         torch.random.set_rng_state(rand_state)
@@ -132,10 +133,10 @@ class CSVec(object):
         tokens = tokens.reshape((1, nTokens))
 
         # computing sign hashes (4 wise independence)
-        h1 = hashes[:,2:3]
-        h2 = hashes[:,3:4]
-        h3 = hashes[:,4:5]
-        h4 = hashes[:,5:6]
+        h1 = hashes[:, 2:3]
+        h2 = hashes[:, 3:4]
+        h3 = hashes[:, 4:5]
+        h4 = hashes[:, 5:6]
         self.signs = (((h1 * tokens + h2) * tokens + h3) * tokens + h4)
         self.signs = ((self.signs % LARGEPRIME % 2) * 2 - 1).float()
 
@@ -146,8 +147,8 @@ class CSVec(object):
         self.signs = self.signs.to(self.device)
 
         # computing bucket hashes (2-wise independence)
-        h1 = hashes[:,0:1]
-        h2 = hashes[:,1:2]
+        h1 = hashes[:, 0:1]
+        h2 = hashes[:, 1:2]
         self.buckets = ((h1 * tokens) + h2) % LARGEPRIME % self.c
 
         # only move to device now. See comment above.
@@ -230,11 +231,11 @@ class CSVec(object):
         """
         if isinstance(other, CSVec):
             # merges csh sketch into self
-            assert(self.d == other.d)
-            assert(self.c == other.c)
-            assert(self.r == other.r)
-            assert(self.device == other.device)
-            assert(self.numBlocks == other.numBlocks)
+            assert (self.d == other.d)
+            assert (self.c == other.c)
+            assert (self.r == other.r)
+            assert (self.device == other.device)
+            assert (self.numBlocks == other.numBlocks)
             self.table += other.table
         else:
             raise ValueError("Can't add this to a CSVec: {}".format(other))
@@ -259,12 +260,12 @@ class CSVec(object):
         Args:
             vec: the vector to be sketched
         """
-        assert(len(vec.size()) == 1 and vec.size()[0] == self.d)
+        assert (len(vec.size()) == 1 and vec.size()[0] == self.d)
 
         # the vector is sketched to each row independently
         for r in range(self.r):
-            buckets = self.buckets[r,:].to(self.device)
-            signs = self.signs[r,:].to(self.device)
+            buckets = self.buckets[r, :].to(self.device)
+            signs = self.signs[r, :].to(self.device)
             # the main computation here is the bincount below, but
             # there's lots of index accounitng leading up to it due
             # to numBlocks being potentially > 1
@@ -272,28 +273,28 @@ class CSVec(object):
                 start = blockId * buckets.size()[0]
                 end = (blockId + 1) * buckets.size()[0]
                 end = min(end, self.d)
-                offsetBuckets = buckets[:end-start].clone()
-                offsetSigns = signs[:end-start].clone()
+                offsetBuckets = buckets[:end - start].clone()
+                offsetSigns = signs[:end - start].clone()
                 if self.numBlocks > 1:
                     offsetBuckets += self.blockOffsets[blockId]
                     offsetBuckets %= self.c
                     offsetSigns *= self.blockSigns[blockId]
                 # bincount computes the sum of all values in the vector
                 # that correspond to each bucket
-                self.table[r,:] += torch.bincount(
-                                    input=offsetBuckets,
-                                    weights=offsetSigns * vec[start:end],
-                                    minlength=self.c
-                                   )
+                self.table[r, :] += torch.bincount(
+                    input=offsetBuckets,
+                    weights=offsetSigns * vec[start:end],
+                    minlength=self.c
+                )
 
     def _findHHK(self, k):
-        assert(k is not None)
-        #tokens = torch.arange(self.d, device=self.device)
-        #vals = self._findValues(tokens)
+        assert (k is not None)
+        # tokens = torch.arange(self.d, device=self.device)
+        # vals = self._findValues(tokens)
         vals = self._findAllValues()
 
         # sort is faster than torch.topk...
-        #HHs = torch.sort(vals**2)[1][-k:]
+        # HHs = torch.sort(vals**2)[1][-k:]
 
         # topk on cuda returns what looks like uninitialized memory if
         # vals has nan values in it
@@ -301,11 +302,11 @@ class CSVec(object):
         # output of topk appears to solve this problem
         outVals = torch.zeros(k, device=vals.device)
         HHs = torch.zeros(k, device=vals.device).long()
-        torch.topk(vals**2, k, sorted=False, out=(outVals, HHs))
+        torch.topk(vals ** 2, k, sorted=False, out=(outVals, HHs))
         return HHs, vals[HHs]
 
     def _findHHThr(self, thr):
-        assert(thr is not None)
+        assert (thr is not None)
         vals = self._findAllValues()
         HHs = vals.abs() >= thr
         return HHs, vals[HHs]
@@ -334,7 +335,7 @@ class CSVec(object):
 
     def _findValues(self, coords):
         # estimating frequency of input coordinates
-        assert(self.numBlocks == 1)
+        assert (self.numBlocks == 1)
         d = coords.size()[0]
         vals = torch.zeros(self.r, self.d, device=self.device)
         for r in range(self.r):
@@ -346,8 +347,8 @@ class CSVec(object):
         if self.numBlocks == 1:
             vals = torch.zeros(self.r, self.d, device=self.device)
             for r in range(self.r):
-                vals[r] = (self.table[r, self.buckets[r,:]]
-                           * self.signs[r,:])
+                vals[r] = (self.table[r, self.buckets[r, :]]
+                           * self.signs[r, :])
             return vals.median(dim=0)[0]
         else:
             medians = torch.zeros(self.d, device=self.device)
@@ -355,20 +356,20 @@ class CSVec(object):
                 start = blockId * self.buckets.size()[1]
                 end = (blockId + 1) * self.buckets.size()[1]
                 end = min(end, self.d)
-                vals = torch.zeros(self.r, end-start, device=self.device)
+                vals = torch.zeros(self.r, end - start, device=self.device)
                 for r in range(self.r):
-                    buckets = self.buckets[r, :end-start]
-                    signs = self.signs[r, :end-start]
+                    buckets = self.buckets[r, :end - start]
+                    signs = self.signs[r, :end - start]
                     offsetBuckets = buckets + self.blockOffsets[blockId]
                     offsetBuckets %= self.c
                     offsetSigns = signs * self.blockSigns[blockId]
                     vals[r] = (self.table[r, offsetBuckets]
-                                * offsetSigns)
+                               * offsetSigns)
                 medians[start:end] = vals.median(dim=0)[0]
             return medians
 
     def _findHHs(self, k=None, thr=None):
-        assert((k is None) != (thr is None))
+        assert ((k is None) != (thr is None))
         if k is not None:
             return self._findHHK(k)
         else:
@@ -401,9 +402,9 @@ class CSVec(object):
         hhs = self._findHHs(k=k, thr=thr)
 
         if k is not None:
-            assert(len(hhs[1]) == k)
+            assert (len(hhs[1]) == k)
         if epsilon is not None:
-            assert((hhs[1] < thr).sum() == 0)
+            assert ((hhs[1] < thr).sum() == 0)
 
         # the unsketched vector is 0 everywhere except for HH
         # coordinates, which are set to the HH values
@@ -414,7 +415,7 @@ class CSVec(object):
     def l2estimate(self):
         """ Return an estimate of the L2 norm of the sketch """
         # l2 norm esimation from the sketch
-        return np.sqrt(torch.median(torch.sum(self.table**2,1)).item())
+        return np.sqrt(torch.median(torch.sum(self.table ** 2, 1)).item())
 
     @classmethod
     def median(cls, csvecs):
@@ -425,11 +426,11 @@ class CSVec(object):
         device = csvecs[0].device
         numBlocks = csvecs[0].numBlocks
         for csvec in csvecs:
-            assert(csvec.d == d)
-            assert(csvec.c == c)
-            assert(csvec.r == r)
-            assert(csvec.device == device)
-            assert(csvec.numBlocks == numBlocks)
+            assert (csvec.d == d)
+            assert (csvec.c == c)
+            assert (csvec.r == r)
+            assert (csvec.device == device)
+            assert (csvec.numBlocks == numBlocks)
 
         tables = [csvec.table for csvec in csvecs]
         med = torch.median(torch.stack(tables), dim=0)[0]

@@ -1,7 +1,10 @@
 import unittest
+
+import torch
+
 import csvec
 from csvec import CSVec
-import torch
+
 
 class Base:
     # use Base class to hide CSVecTestCase from the unittest runner
@@ -48,7 +51,7 @@ class Base:
             # make sure the sketch only has one nonzero entry per row
             for i in range(r):
                 with self.subTest(row=i):
-                    self.assertEqual(a.table[i,:].nonzero().numel(), 1)
+                    self.assertEqual(a.table[i, :].nonzero().numel(), 1)
 
             # make sure each row sums to +-1
             summed = a.table.abs().sum(dim=1).view(-1)
@@ -133,6 +136,7 @@ class Base:
             trueMedian = torch.arange(d).float().to(self.device) + 1
             self.assertTrue(torch.allclose(recovered, trueMedian))
 
+
 class TestCaseCPU1(Base.CSVecTestCase):
     def setUp(self):
         # hack to reset csvec's global cache between tests
@@ -144,6 +148,7 @@ class TestCaseCPU1(Base.CSVecTestCase):
         self.csvecArgs = {"numBlocks": self.numBlocks,
                           "device": self.device}
 
+
 class TestCaseCPU2(Base.CSVecTestCase):
     def setUp(self):
         csvec.cache = {}
@@ -153,6 +158,7 @@ class TestCaseCPU2(Base.CSVecTestCase):
 
         self.csvecArgs = {"numBlocks": self.numBlocks,
                           "device": self.device}
+
 
 @unittest.skipIf(not torch.cuda.is_available(), "CUDA not available")
 class TestCaseCUDA2(Base.CSVecTestCase):
